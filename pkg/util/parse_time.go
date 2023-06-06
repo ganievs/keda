@@ -158,7 +158,7 @@ func getNextDayOfMonth(daysStr []string) (int, error) {
 	return days[0], nil
 }
 
-func parseNextTime(interval *ParsedResult, requiredTime *time.Time, location *time.Location) (time.Time, error) {
+func ParseNextTime(interval ParsedResult, requiredTime time.Time, location *time.Location) (time.Time, error) {
 	currentTime := time.Now()
 	if interval.Interval == "day" {
 		return time.Date(currentTime.Year(), currentTime.Month(), currentTime.Day(), requiredTime.Hour(), requiredTime.Minute(), requiredTime.Second(), requiredTime.Nanosecond(), location), nil
@@ -174,5 +174,5 @@ func parseNextTime(interval *ParsedResult, requiredTime *time.Time, location *ti
 		}
 		return time.Date(currentTime.Year(), currentTime.Month(), nextDay, requiredTime.Hour(), requiredTime.Minute(), requiredTime.Second(), requiredTime.Nanosecond(), location), nil
 	}
-	return time.Time{}, fmt.Errorf("invalid data: %s", interval) // Make more convinient error
+	return time.Time{}, fmt.Errorf("invlid interval: %s", interval.Interval) // Make more convinient error
 }

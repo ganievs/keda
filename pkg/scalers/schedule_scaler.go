@@ -14,9 +14,8 @@ import (
 )
 
 const (
-	// imported in schedule TODO: think how to solve
-	// defaultDesiredReplicas = 1
-	scheduleMetricType = "External"
+	defaultScheduleDesiredReplicas = 1
+	scheduleMetricType             = "External"
 )
 
 type scheduleScaler struct {
@@ -127,7 +126,7 @@ func (s *scheduleScaler) GetMetricSpecForScaling(context.Context) []v2.MetricSpe
 
 // GetMetricsAndActivity returns value for a supported metric and an error if there is a problem getting the metric
 func (s *scheduleScaler) GetMetricsAndActivity(_ context.Context, metricName string) ([]external_metrics.ExternalMetricValue, bool, error) {
-	defaultDesiredReplicas := int64(defaultDesiredReplicas)
+	defaultDesiredReplicas := int64(defaultScheduleDesiredReplicas)
 
 	location, err := time.LoadLocation(s.metadata.timezone)
 	if err != nil {
@@ -136,27 +135,34 @@ func (s *scheduleScaler) GetMetricsAndActivity(_ context.Context, metricName str
 
 	// Since we are considering the timestamp here and not the exact time, timezone does matter.
 	currentTime := time.Now().Unix()
-	interval, err := kedautil.ParseInterval(s.metadata.interval)
+	parsedInterval, err := kedautil.ParseInterval(s.metadata.interval)
 	if err != nil {
-		return []external_metrics.ExternalMetricValue{}, false, fmt.Errorf("error initializing interval: %w", interval)
+		return []external_metrics.ExternalMetricValue{}, false, fmt.Errorf("error initializing interval: %v", parsedInterval)
 	}
-	if interval.Interval == "day" {
+	startTime, err := kedautil.ParseTime(s.metadata.start)
+	if err != nil {
+		return []external_metrics.ExternalMetricValue{}, false, fmt.Errorf("error initializing start time: %s", s.metadata.start)
 	}
-	nextStartTime, startTimescheduleErr := time.Date(location, s.metadata.start)
+	endTime, err := kedautil.ParseTime(s.metadata.end)
+	if err != nil {
+		return []external_metrics.ExternalMetricValue{}, false, fmt.Errorf("error initializing start time: %s", s.metadata.end)
+	}
+
+	nextStartTime, startTimescheduleErr := kedautil.ParseNextTime(parsedInterval, startTime, location)
 	if startTimescheduleErr != nil {
 		return []external_metrics.ExternalMetricValue{}, false, fmt.Errorf("error initializing start schedule: %w", startTimescheduleErr)
 	}
 
-	nextEndTime, endTimescheduleErr := getScheduleTime(location, s.metadata.end)
+	nextEndTime, endTimescheduleErr := kedautil.ParseNextTime(parsedInterval, endTime, location)
 	if endTimescheduleErr != nil {
 		return []external_metrics.ExternalMetricValue{}, false, fmt.Errorf("error intializing end schedule: %w", endTimescheduleErr)
 	}
 
 	switch {
-	case nextStartTime < nextEndTime && currentTime < nextStartTime:
-		metric := GenerateMetricInMili(metricName, float64(defaultDesiredReplicas))
+	case nextStartTime.Unix() < nextEndTime.Unix() && currentTime < nextStartTime.Unix():
+		metric := GenerateMetricInMili(metricName, float64(defaultScheduleDesiredReplicas))
 		return []external_metrics.ExternalMetricValue{metric}, false, nil
-	case currentTime <= nextEndTime:
+	case currentTime <= nextEndTime.Unix():
 		metric := GenerateMetricInMili(metricName, float64(s.metadata.desiredReplicas))
 		return []external_metrics.ExternalMetricValue{metric}, true, nil
 	default:
